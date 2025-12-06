@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>India – Festive Offer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { margin:0; padding:0; background:#f6f6f6; font-family:Arial, sans-serif; }
+    .wrap { width:100%; padding:20px 0; }
+    .card { max-width:600px; margin:0 auto; background:#ffffff; border-radius:6px; overflow:hidden; }
+    .header { background:#ff9933; color:#fff; text-align:center; padding:16px; }
+    .header img { max-height:40px; display:block; margin:0 auto 8px; }
+    .header h1 { margin:0; font-size:20px; }
+    .hero img { width:100%; display:block; }
+    .content { padding:18px; color:#333; line-height:1.5; font-size:14px; }
+    .cta { display:inline-block; background:#0066cc; color:#fff; padding:10px 16px; text-decoration:none; border-radius:4px; margin:12px 0; }
+    .offer-img { max-width:120px; display:block; margin:12px auto; }
+    .footer { font-size:12px; color:#777; padding:14px; text-align:center; }
+    a { color:#0066cc; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="header">
+        <img src="images/logo.png" alt="Brand Logo">
+        <h1>Exclusive Festive Offer for India</h1>
+      </div>
+
+      <div class="hero">
+        <img src="images/banner.png" alt="India Festive Banner">
+      </div>
+
+      <div class="content">
+        <p>Hi {{name}},</p>
+        <p>Celebrate this festive season with special discounts curated just for our customers in India.</p>
+        <p><strong>Flat ₹500 OFF</strong> on selected items. Use code <strong>INDIA500</strong> at checkout.</p>
+
+        <img class="offer-img" src="images/offer.png" alt="Special Offer">
+
+        <p>
+          <a class="cta" href="https://example.com/offers/india?utm_source=email">Shop Festive Deals</a>
+        </p>
+
+        <p>If you have any questions, just reply to this email and our team will help you.</p>
+      </div>
+
+      <div class="footer">
+        <p>If you no longer wish to receive these emails, you can <a href="{{unsubscribe_link}}">unsubscribe here</a>.</p>
+        <p>© 2025 MailMate · India Campaign</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

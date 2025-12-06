@@ -1,0 +1,81 @@
+# -------------------------
+# Python ignores
+# -------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.so
+
+# Byte-compiled / optimized / DLL files
+*.py[cod]
+*$py.class
+
+# Virtual environment (venv)
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# -------------------------
+# OS/System files
+# -------------------------
+.DS_Store
+Thumbs.db
+
+# -------------------------
+# Environment & secrets
+# -------------------------
+.env
+.env.*
+!.env.example
+
+# -------------------------
+# IDE/editor settings
+# -------------------------
+.vscode/
+.idea/
+*.iml
+
+# -------------------------
+# Logs
+# -------------------------
+*.log
+logs/
+
+# -------------------------
+# Coverage / Testing
+# -------------------------
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+.nox/
+dist/
+build/
+
+# -------------------------
+# Cache
+# -------------------------
+.cache/
+__pycache__/
+pip-wheel-metadata/
+
+# -------------------------
+# Local / Debug files
+# -------------------------
+verify_*.py
+debug_*.py
+check_*.py
+inspect_*.py
+simulate_*.py
+*.txt
+!requirements.txt
+!runtime.txt
+!Procfile
