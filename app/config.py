@@ -1,10 +1,10 @@
+import os
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "mailmate"
     BACKEND_PUBLIC_URL: str = "http://localhost:8000"
 
-    # add these two lines:
     ENV: str = "development"
     DEBUG: bool = True
 
@@ -17,8 +17,14 @@ class Settings(BaseSettings):
     SENDGRID_PUBLIC_KEY: str | None = None
     SENDGRID_WEBHOOK_DISABLE_VERIFY: bool = False
     SENDER_EMAIL: str
-    CELERY_BROKER_URL: str = "redis://localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
+    
+    # --- THE FIX IS HERE ---
+    # We use os.getenv("REDIS_URL") to grab the Railway variable.
+    # If it's missing (local dev), we fall back to localhost.
+    CELERY_BROKER_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    CELERY_RESULT_BACKEND: str = os.getenv("REDIS_URL", "redis://localhost:6379/1")
+    # -----------------------
+
     REGISTRATION_SECRET_KEY: str = "secret123"
 
     class Config:
