@@ -48,4 +48,4 @@ def make_celery() -> Celery:
     return celery
 
 # This is the Celery app object that the worker will use
-celery_app = make_celery()
+celery = make_celery()
