@@ -1,124 +1,122 @@
 # app/campaigns/tasks.py
 
+import asyncio
 from datetime import datetime, timezone
 from bson import ObjectId
-import asyncio
-import os
+from motor.motor_asyncio import AsyncIOMotorClient
 
+# CRITICAL: Import from the new worker file we created
 from app.worker import celery_app
-from app.campaigns.services import JOBS
-from app.services.send_bulk_service import BulkEmailService
 from app.config import settings
+from app.services.send_bulk_service import BulkEmailService
 
+# ---------------------------------------------------------------------------
+# Task 1: Process Scheduled Jobs
+# ---------------------------------------------------------------------------
 
 @celery_app.task(name="campaigns.process_scheduled_job")
 def process_scheduled_job(job_id: str):
     """
-    Celery entrypoint (sync) → calls async job runner
+    Celery entrypoint (sync) -> calls async job runner
     """
     print(f"[Celery] Started scheduled job: {job_id}")
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(run_job_async(job_id))
-    loop.close()
+    try:
+        loop.run_until_complete(run_job_async(job_id))
+    finally:
+        loop.close()
 
 
 async def run_job_async(job_id: str):
     """
-    Async logic:
-    - load job
-    - wait until scheduled time
-    - send emails using SendGrid bulk service
-    - mark status: done
+    Async logic: Load job, wait for time, send emails, update status.
     """
-
-    # 1️⃣ Validate ObjectId
+    # 1. Validate ObjectId
     try:
         oid = ObjectId(job_id)
-    except:
+    except Exception:
         print("[Celery] ❌ Invalid ObjectId:", job_id)
         return
 
-    # 2️⃣ Load job from DB
-    # 2️⃣ Load job from DB
-    from motor.motor_asyncio import AsyncIOMotorClient
-    from app.config import settings
+    # 2. Database Connection (Specific to this event loop)
     client = AsyncIOMotorClient(settings.MONGO_URI)
     db = client.get_default_database()
     JOBS = db["scheduled_jobs"]
 
-    job = await JOBS.find_one({"_id": oid})
+    try:
+        job = await JOBS.find_one({"_id": oid})
 
-    if not job:
-        print(f"[Celery] ❌ Job not found: {job_id}")
-        return
+        if not job:
+            print(f"[Celery] ❌ Job not found: {job_id}")
+            return
 
-    run_at = job["run_at"]
-    now = datetime.now(timezone.utc)
+        run_at = job["run_at"]
+        now = datetime.now(timezone.utc)
 
-    # 🔧 FIX: MongoDB returns naive datetime → convert to UTC aware
-    if run_at.tzinfo is None:
-        run_at = run_at.replace(tzinfo=timezone.utc)
+        # Fix timezone naive/aware issues
+        if run_at.tzinfo is None:
+            run_at = run_at.replace(tzinfo=timezone.utc)
 
-    print(f"[Celery] Job run_at={run_at}, now={now}")
+        print(f"[Celery] Job run_at={run_at}, now={now}")
 
-    # 3️⃣ Wait until scheduled time
-    # NOTE: We used to sleep here, but now we use Celery's 'eta' feature.
-    # However, if the worker picks it up slightly early (clock skew), we can do a small check.
-    if run_at > now:
-        delta = (run_at - now).total_seconds()
-        if delta > 0:
-            print(f"[Celery] ⏳ Task started early. Waiting {delta:.2f}s...")
-            await asyncio.sleep(delta)
+        # 3. Wait if slightly early (Clock skew protection)
+        if run_at > now:
+            delta = (run_at - now).total_seconds()
+            if delta > 0:
+                print(f"[Celery] ⏳ Task started early. Waiting {delta:.2f}s...")
+                await asyncio.sleep(delta)
 
-    # 4️⃣ Sender address
-    from app.config import settings
-    from_email = settings.SENDER_EMAIL
-    if not from_email:
-        print("[Celery] ❌ ERROR: No SENDER_EMAIL configured.")
-        return
-    
-    print(f"Attempting to send email FROM {from_email}...")
-    
-    # Extract reply_to from job if available
-    reply_to = job.get("reply_to")
+        # 4. Prepare Sender
+        from_email = settings.SENDER_EMAIL
+        if not from_email:
+            print("[Celery] ❌ ERROR: No SENDER_EMAIL configured.")
+            return
 
-    # 5️⃣ Extract subject from first payload item
-    first_msg = job["payload"][0] if job["payload"] else {}
-    subject = first_msg.get("subject", "")
+        print(f"Attempting to send email FROM {from_email}...")
 
-    # 6️⃣ Prepare full bulk payload for BulkEmailService
-    payload = {
-        "campaign_id": job["campaign_id"],
-        "campaign_name": job.get("campaign_name", ""),
-        "subject": subject,
-        "segment": job.get("segment", ""),
-        "messages": job["payload"],
-        "total_recipients": len(job["payload"]),
-        "from_email": from_email,
-        "reply_to": reply_to,
-    }
+        # 5. Prepare Payload
+        first_msg = job["payload"][0] if job["payload"] else {}
+        subject = first_msg.get("subject", "")
+        reply_to = job.get("reply_to")
 
-    # 7️⃣ Send via SendGrid bulk service
-    service = BulkEmailService(
-        sendgrid_api_key=settings.SENDGRID_API_KEY,
-        email_logs_collection=None  # use default email_logs collection
-    )
+        payload = {
+            "campaign_id": job["campaign_id"],
+            "campaign_name": job.get("campaign_name", ""),
+            "subject": subject,
+            "segment": job.get("segment", ""),
+            "messages": job["payload"],
+            "total_recipients": len(job["payload"]),
+            "from_email": from_email,
+            "reply_to": reply_to,
+        }
 
-    print(f"[Celery] 🚀 Sending emails for job {job_id} ...")
+        # 6. Send via SendGrid
+        service = BulkEmailService(
+            sendgrid_api_key=settings.SENDGRID_API_KEY,
+            email_logs_collection=None
+        )
 
-    result = await service.send_bulk(payload)
-    await service.close()
+        print(f"[Celery] 🚀 Sending emails for job {job_id} ...")
+        result = await service.send_bulk(payload)
+        await service.close()
 
-    # 8️⃣ Mark job completed
-    await JOBS.update_one(
-        {"_id": oid},
-        {"$set": {"status": "done", "result": result}}
-    )
+        # 7. Update Job Status
+        await JOBS.update_one(
+            {"_id": oid},
+            {"$set": {"status": "done", "result": result}}
+        )
 
-    print(f"[Celery] ✅ Job completed: {job_id}")
+        print(f"[Celery] ✅ Job completed: {job_id}")
 
+    finally:
+        client.close()
+
+
+# ---------------------------------------------------------------------------
+# Task 2: Send Immediate Campaign
+# ---------------------------------------------------------------------------
 
 @celery_app.task(name="campaigns.send_campaign_task")
 def send_campaign_task(campaign_id: str):
@@ -129,107 +127,114 @@ def send_campaign_task(campaign_id: str):
     
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(run_send_campaign_async(campaign_id))
-    loop.close()
+    try:
+        loop.run_until_complete(run_send_campaign_async(campaign_id))
+    finally:
+        loop.close()
+
 
 async def run_send_campaign_async(campaign_id: str):
-    from motor.motor_asyncio import AsyncIOMotorClient
-    from app.config import settings
+    # Database Connection (Specific to this event loop)
     client = AsyncIOMotorClient(settings.MONGO_URI)
     db = client.get_default_database()
     campaigns = db["campaigns"]
     contacts = db["contacts"]
     
     try:
-        oid = ObjectId(campaign_id)
-    except:
-        print(f"[Celery] ❌ Invalid Campaign ID: {campaign_id}")
-        return
+        try:
+            oid = ObjectId(campaign_id)
+        except Exception:
+            print(f"[Celery] ❌ Invalid Campaign ID: {campaign_id}")
+            return
 
-    # 1. Fetch campaign
-    campaign = await campaigns.find_one({"_id": oid})
-    if not campaign:
-        print(f"[Celery] ❌ Campaign not found: {campaign_id}")
-        return
+        # 1. Fetch Campaign
+        campaign = await campaigns.find_one({"_id": oid})
+        if not campaign:
+            print(f"[Celery] ❌ Campaign not found: {campaign_id}")
+            return
 
-    # 2. Fetch contacts
-    # Logic: if segment is "All Contacts", fetch all. 
-    # If it's a segment name, filter by segment.
-    segment = campaign.get("segment", "All Contacts")
-    query = {"unsubscribed": {"$ne": True}}
-    
-    if segment != "All Contacts":
-        query["segment"] = segment
+        # 2. Fetch Contacts
+        segment = campaign.get("segment", "All Contacts")
+        query = {"unsubscribed": {"$ne": True}}
         
-    contact_list = await contacts.find(query).to_list(length=None)
-    
-    if not contact_list:
-        print(f"[Celery] ⚠️ No contacts found for segment: {segment}")
-        await campaigns.update_one({"_id": oid}, {"$set": {"status": "Failed", "error": "No contacts found"}})
-        return
-
-    print(f"[Celery] Found {len(contact_list)} contacts for campaign '{campaign.get('title')}'")
-
-    # 3. Prepare payload
-    # Override sender with env var
-    from app.config import settings
-    from_email = settings.SENDER_EMAIL
-    if not from_email:
-        print("[Celery] ❌ ERROR: No SENDER_EMAIL configured.")
-        return
-
-    print(f"Attempting to send email FROM {from_email}...")
-    
-    # Extract reply_to from campaign if available
-    reply_to = campaign.get("reply_to")
-
-    messages = []
-    html_content = campaign.get("html_content", "")
-    subject = campaign.get("subject", "")
-    
-    for c in contact_list:
-        # Simple personalization
-        # In a real app, use a template engine like Jinja2
-        personal_html = html_content.replace("{{name}}", c.get("name", "Friend"))
+        if segment != "All Contacts":
+            query["segment"] = segment
+            
+        contact_list = await contacts.find(query).to_list(length=None)
         
-        # Add unsubscribe link
-        unsubscribe_link = f"{getattr(settings, 'BACKEND_PUBLIC_URL', 'http://localhost:8000')}/unsubscribe/{str(c['_id'])}"
-        personal_html += f"<br><br><a href='{unsubscribe_link}'>Unsubscribe</a>"
+        if not contact_list:
+            print(f"[Celery] ⚠️ No contacts found for segment: {segment}")
+            await campaigns.update_one(
+                {"_id": oid}, 
+                {"$set": {"status": "Failed", "error": "No contacts found"}}
+            )
+            return
 
-        messages.append({
-            "email": c.get("email"),
-            "name": c.get("name"),
+        print(f"[Celery] Found {len(contact_list)} contacts for campaign '{campaign.get('title')}'")
+
+        # 3. Prepare Payload
+        from_email = settings.SENDER_EMAIL
+        if not from_email:
+            print("[Celery] ❌ ERROR: No SENDER_EMAIL configured.")
+            return
+
+        messages = []
+        html_content = campaign.get("html_content", "")
+        subject = campaign.get("subject", "")
+        reply_to = campaign.get("reply_to")
+        
+        # Base URL for unsubscribe links
+        backend_url = getattr(settings, 'BACKEND_PUBLIC_URL', 'http://localhost:8000')
+
+        for c in contact_list:
+            # Personalization
+            personal_html = html_content.replace("{{name}}", c.get("name", "Friend"))
+            
+            # Unsubscribe Link
+            unsubscribe_link = f"{backend_url}/unsubscribe/{str(c['_id'])}"
+            personal_html += f"<br><br><a href='{unsubscribe_link}'>Unsubscribe</a>"
+
+            messages.append({
+                "email": c.get("email"),
+                "name": c.get("name"),
+                "subject": subject,
+                "html": personal_html,
+                "unsubscribe_link": unsubscribe_link
+            })
+
+        payload = {
+            "campaign_id": str(campaign["_id"]),
+            "campaign_name": campaign.get("title"),
             "subject": subject,
-            "html": personal_html,
-            "unsubscribe_link": unsubscribe_link
-        })
+            "segment": segment,
+            "messages": messages,
+            "total_recipients": len(messages),
+            "from_email": from_email,
+            "reply_to": reply_to,
+        }
 
-    payload = {
-        "campaign_id": str(campaign["_id"]),
-        "campaign_name": campaign.get("title"),
-        "subject": subject,
-        "segment": segment,
-        "messages": messages,
-        "total_recipients": len(messages),
-        "from_email": from_email,
-        "reply_to": reply_to,
-    }
+        # 4. Send Emails
+        service = BulkEmailService(
+            sendgrid_api_key=settings.SENDGRID_API_KEY,
+            email_logs_collection=None 
+        )
 
-    # 4. Send emails
-    service = BulkEmailService(
-        sendgrid_api_key=settings.SENDGRID_API_KEY,
-        email_logs_collection=None 
-    )
+        print(f"[Celery] 🚀 Sending {len(messages)} emails...")
+        result = await service.send_bulk(payload)
+        await service.close()
 
-    print(f"[Celery] 🚀 Sending {len(messages)} emails...")
-    result = await service.send_bulk(payload)
-    await service.close()
+        # 5. Update Status
+        new_status = "Sent" if result.get("sent", 0) > 0 else "Failed"
+        await campaigns.update_one(
+            {"_id": oid},
+            {"$set": {
+                "status": new_status, 
+                "result": result, 
+                "sent_at": datetime.now(timezone.utc)
+            }}
+        )
+        
+        print(f"[Celery] ✅ Campaign sent. Status: {new_status}")
 
-    # 5. Update status
-    new_status = "Sent" if result.get("sent", 0) > 0 else "Failed"
-    await campaigns.update_one(
-        {"_id": oid},
-        {"$set": {"status": new_status, "result": result, "sent_at": datetime.utcnow()}}
-    )
-    
-    print(f"[Celery] ✅ Campaign sent. Status: {new_status}")
+    finally:
+        client.close()
