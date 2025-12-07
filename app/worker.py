@@ -1,32 +1,38 @@
 # app/worker.py
 import os
-from celery import Celery
 
-# 1. Capture the Redis URL immediately
+# 1. FORCE THE ENVIRONMENT VARIABLES FIRST
+# By setting these in os.environ, Celery will pick them up automatically
+# and they cannot be overwritten by config files easily.
 redis_url = os.getenv("REDIS_URL")
 
-# Fallback string for local development
-fallback = "redis://localhost:6379/0"
+if redis_url:
+    print(f"✅ FOUND REDIS URL: {redis_url}")
+    # Force Celery to use this via internal env vars
+    os.environ["CELERY_BROKER_URL"] = redis_url
+    os.environ["CELERY_RESULT_BACKEND"] = redis_url
+else:
+    print("⚠️ NO REDIS URL FOUND. Defaulting to localhost.")
+    # Fallback for local testing
+    os.environ["CELERY_BROKER_URL"] = "redis://localhost:6379/0"
+    os.environ["CELERY_RESULT_BACKEND"] = "redis://localhost:6379/1"
 
-# Select the actual URL to use
-broker_url = redis_url if redis_url else fallback
+# 2. Now import Celery
+from celery import Celery
 
 print("-------------------------------------------------------")
-print(f"🚀 WORKER LOADING - VERSION FINAL")
-print(f"✅ DETECTED REDIS URL: {broker_url}")
+print(f"🚀 WORKER LOADING - ENV VAR STRATEGY")
+print(f"✅ ENV BROKER: {os.environ.get('CELERY_BROKER_URL')}")
 print("-------------------------------------------------------")
 
-# 2. Configure Celery
-# We pass the broker DIRECTLY here. This is the strongest way to set it.
+# 3. Create Celery App
+# NOTICE: We do NOT pass broker= here. Celery will find the env var we just set.
 celery_app = Celery(
     "mailmate",
-    broker=broker_url,  # <--- Forced here
-    backend=broker_url, # <--- Forced here
     broker_connection_retry_on_startup=True,
-    include=["app.campaigns.tasks"]
+    include=["app.campaigns.tasks"] 
 )
 
-# 3. Apply settings
 celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
@@ -36,9 +42,5 @@ celery_app.conf.update(
     worker_concurrency=1,
 )
 
-# 4. SAFETY LOCK: Overwrite config one last time
-# This protects against any imported tasks resetting the config
-celery_app.conf.broker_url = broker_url
-celery_app.conf.result_backend = broker_url
-
-print(f"🔒 LOCKED CONFIG BROKER: {celery_app.conf.broker_url}")
+# 4. Final Verification
+print(f"🔒 FINAL CONFIRMED BROKER: {celery_app.conf.broker_url}")
