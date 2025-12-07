@@ -5,7 +5,7 @@ from bson import ObjectId
 import asyncio
 import os
 
-from app.utils.celery_app import celery_app
+from app.worker import celery_app
 from app.campaigns.services import JOBS
 from app.services.send_bulk_service import BulkEmailService
 from app.config import settings
