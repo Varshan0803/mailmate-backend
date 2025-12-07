@@ -2,24 +2,26 @@
 
 import os
 from celery import Celery
-from app.utils.config import settings
+
+# --- DELETED THE BROKEN IMPORT LINE HERE ---
 
 def make_celery() -> Celery:
-    # 1. Get the Railway Redis URL
-    # We grab this directly from the environment to be 100% sure
+    # 1. Get the Railway Redis URL directly from environment
     redis_url = os.getenv("REDIS_URL")
+    
+    # Fallback to localhost if not found (for local dev)
+    broker_url = redis_url if redis_url else "redis://localhost:6379/0"
 
     # 2. Create the Celery App
-    # We initially pass the URL, but config.py might try to overwrite it later
     celery = Celery(
         "mailmate",
-        broker=redis_url,
-        backend=redis_url,
+        broker=broker_url,
+        backend=broker_url,
         broker_connection_retry_on_startup=True,
         include=["app.campaigns.tasks"]
     )
 
-    # 3. Load other settings (serialization, timezone, etc)
+    # 3. Apply standard configuration
     celery.conf.update(
         task_serializer="json",
         accept_content=["json"],
@@ -29,21 +31,16 @@ def make_celery() -> Celery:
         worker_concurrency=1,
     )
 
-    # ---------------------------------------------------------
-    # 4. THE NUCLEAR FIX: FORCE OVERRIDE
-    # ---------------------------------------------------------
-    # If we found a valid REDIS_URL in the environment, we FORCE
-    # Celery to use it, ignoring whatever is in config.py
+    # 4. FORCE OVERRIDE (The Nuclear Fix)
+    # If we are on Railway (redis_url exists), we force these settings
+    # to ensure config.py cannot mess it up.
     if redis_url:
         print(f"DEBUG: Forcing Broker URL to: {redis_url}")
         celery.conf.broker_url = redis_url
         celery.conf.result_backend = redis_url
-    else:
-        print("DEBUG: No REDIS_URL found. Falling back to default (localhost).")
-    # ---------------------------------------------------------
 
     return celery
 
-# Export both names to satisfy Railway and your imports
+# Export both names
 celery = make_celery()
 celery_app = celery
