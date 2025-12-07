@@ -47,5 +47,10 @@ def make_celery() -> Celery:
 
     return celery
 
-# This is the Celery app object that the worker will use
+# ... (rest of your code above)
+
+# 1. The variable Railway/Celery looks for (standard name)
 celery = make_celery()
+
+# 2. The alias your other files (like tasks.py) are looking for
+celery_app = celery
