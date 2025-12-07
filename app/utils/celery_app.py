@@ -1,22 +1,24 @@
 # app/utils/celery_app.py
 
+import os
 from celery import Celery
-from app.config import settings  # ✅ FIXED: correct import path
-
 
 def make_celery() -> Celery:
     """
     Create and configure Celery app instance.
     """
-    celery = Celery(
-    "mailmate",
-    broker=settings.CELERY_BROKER_URL,
-    backend=settings.CELERY_RESULT_BACKEND,
-    include=[
-        "app.campaigns.tasks",   # 👈 ensures auto-discovery of tasks
-    ]
-    )
+    # Priority: 1. REDIS_URL, 2. CELERY_BROKER_URL, 3. Fallback to localhost
+    redis_url = os.getenv("REDIS_URL", os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0"))
 
+    celery = Celery(
+        "mailmate",
+        broker=redis_url,
+        backend=redis_url,
+        broker_connection_retry_on_startup=True,
+        include=[
+            "app.campaigns.tasks",
+        ]
+    )
 
     # Optional: common Celery config
     celery.conf.update(
