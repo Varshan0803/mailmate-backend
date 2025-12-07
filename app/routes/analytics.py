@@ -7,8 +7,9 @@ from app.services.analytics_service import AnalyticsService
 router = APIRouter()
 
 
-@router.get("/analytics/{campaign_id}/details")
-async def campaign_details(campaign_id: str):
+@router.get("/analytics")
+async def analytics_summary(id: str): 
+    campaign_id = id  # map the query param 'id' to the variable your code expects
     # ensure campaign exists
     try:
         campaign_obj = await campaigns.find_one({"_id": ObjectId(campaign_id)})
