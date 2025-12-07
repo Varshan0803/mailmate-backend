@@ -19,7 +19,7 @@ from app.campaigns import routes as campaigns_routes
 from app.storage.router import router as storage_router
 from app.routes import send_bulk
 from app.routes import send_bulk_test
-from app.routes import analytics_routes
+from app.routes import analytics
 from app.routes import sendgrid_webhook
 from app.routes import unsubscribe as unsubscribe_routes
 
@@ -73,7 +73,7 @@ app.include_router(auth.router)
 app.include_router(contacts_routes.router)
 app.include_router(templates_routes.router)
 app.include_router(campaigns_routes.router)
-app.include_router(analytics_routes.router)
+app.include_router(analytics.router)
 print("DEBUG: Including sendgrid_webhook router")
 app.include_router(sendgrid_webhook.router)
 app.include_router(unsubscribe_routes.router)
