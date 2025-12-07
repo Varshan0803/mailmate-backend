@@ -7,7 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 # CRITICAL: Import from the new worker file we created
 from app.worker import celery_app
-from app.config import settings
+from app.utils.config import settings
 from app.services.send_bulk_service import BulkEmailService
 
 # ---------------------------------------------------------------------------
