@@ -2,8 +2,8 @@
 import os
 
 # 1. FORCE THE ENVIRONMENT VARIABLES FIRST
-# By setting these in os.environ, Celery will pick them up automatically
-# and they cannot be overwritten by config files easily.
+# By setting these in os.environ, Celery will pick them up automatically.
+# This happens at the OS level, so Python imports cannot easily overwrite it.
 redis_url = os.getenv("REDIS_URL")
 
 if redis_url:
@@ -26,7 +26,8 @@ print(f"✅ ENV BROKER: {os.environ.get('CELERY_BROKER_URL')}")
 print("-------------------------------------------------------")
 
 # 3. Create Celery App
-# NOTICE: We do NOT pass broker= here. Celery will find the env var we just set.
+# NOTICE: We do NOT pass broker= here. Celery will automatically find 
+# the CELERY_BROKER_URL variable we set above.
 celery_app = Celery(
     "mailmate",
     broker_connection_retry_on_startup=True,
