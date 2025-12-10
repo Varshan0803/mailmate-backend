@@ -31,7 +31,7 @@ async def upload_image(file: UploadFile = File(...), user = Depends(get_current_
         f.write(contents)
     # Return absolute URL path using BACKEND_PUBLIC_URL to match the /static mount
     # url = f"/storage/files/{unique}" -> INCORRECT
-    url = f"{settings.BACKEND_PUBLIC_URL}/static/uploads/{unique}"
+    url = f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}/static/uploads/{unique}"
     return UploadResponse(filename=unique, url=url, size=len(contents))
 
 @router.get("/files/{filename}")
