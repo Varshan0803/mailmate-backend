@@ -3,7 +3,8 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "mailmate"
-    BACKEND_PUBLIC_URL: str = "http://localhost:8000"
+    # Default to deployed backend; can be overridden via env
+    BACKEND_PUBLIC_URL: str = "https://web-production-dab80.up.railway.app"
     ENV: str = "development"
     DEBUG: bool = True
 
