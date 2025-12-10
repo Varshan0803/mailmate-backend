@@ -6,39 +6,45 @@ from app.config import settings
 BACKEND_PUBLIC_URL = settings.BACKEND_PUBLIC_URL.rstrip("/")
 
 
+def _replace(src: str, old: str, new: str) -> str:
+    """Small helper to keep replacements readable."""
+    return src.replace(old, new)
+
+
 def to_absolute_urls(html: str) -> str:
     """
-    Convert all relative storage URLs inside HTML to absolute URLs.
+    Convert storage URLs inside HTML to absolute URLs.
 
-    Examples converted:
-        src="/storage/files/abc.png"
-        src='/storage/files/abc.png'
-        src=/storage/files/abc.png
-
-    Output:
-        src="http://host/storage/files/abc.png"
+    Handles:
+    - /storage/files/* (relative)
+    - /static/uploads/* (relative)
+    - localhost/127.0.0.1 static URLs persisted in older content
     """
-
     if not html:
         return html or ""
 
-    # Double-quoted → src="/storage/files/xxx"
-    html = html.replace(
-        'src="/storage/files/',
-        f'src="{BACKEND_PUBLIC_URL}/storage/files/'
-    )
+    target_storage = f"{BACKEND_PUBLIC_URL}/storage/files/"
+    target_uploads = f"{BACKEND_PUBLIC_URL}/static/uploads/"
 
-    # Single-quoted → src='/storage/files/xxx'
-    html = html.replace(
-        "src='/storage/files/",
-        f"src='{BACKEND_PUBLIC_URL}/storage/files/"
-    )
+    # Common relative patterns
+    html = _replace(html, 'src="/storage/files/', f'src="{target_storage}')
+    html = _replace(html, "src='/storage/files/", f"src='{target_storage}")
+    html = re.sub(r'src=/storage/files/', f'src={target_storage}', html)
 
-    # No quotes → src=/storage/files/xxx
-    html = re.sub(
-        r'src=/storage/files/',
-        f'src={BACKEND_PUBLIC_URL}/storage/files/',
-        html
-    )
+    html = _replace(html, 'src="/static/uploads/', f'src="{target_uploads}')
+    html = _replace(html, "src='/static/uploads/", f"src='{target_uploads}")
+    html = re.sub(r'src=/static/uploads/', f'src={target_uploads}', html)
+
+    # Legacy absolute hosts to normalize
+    legacy_hosts = [
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "https://localhost:8000",
+        "https://127.0.0.1:8000",
+    ]
+    for host in legacy_hosts:
+        html = _replace(html, f'src="{host}/static/uploads/', f'src="{target_uploads}')
+        html = _replace(html, f"src='{host}/static/uploads/", f"src='{target_uploads}")
+        html = _replace(html, f'src={host}/static/uploads/', f'src={target_uploads}')
 
     return html

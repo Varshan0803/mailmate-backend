@@ -116,7 +116,7 @@ async def get_campaign(campaign_id: str, user=Depends(get_current_user)):
     if not doc:
         raise HTTPException(status_code=404, detail="Campaign not found")
     # Fallback to template content if html_content is empty
-    html_content = doc.get("html_content", "")
+    html_content = to_absolute_urls(doc.get("html_content", ""))
     if not html_content and doc.get("template_id"):
         template_doc = await template_services.get_template(doc["template_id"])
         if template_doc:
