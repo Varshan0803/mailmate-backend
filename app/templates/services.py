@@ -9,6 +9,7 @@ from fastapi import HTTPException, UploadFile
 
 from app.db.client import db
 from app.storage.utils import gen_unique_filename, ensure_upload_dir
+from app.utils.absolute import to_absolute_urls
 
 TEMPLATES_DIR = "templates_storage"     # folder for extracted ZIP (temporary)
 os.makedirs(TEMPLATES_DIR, exist_ok=True)
@@ -35,6 +36,8 @@ async def list_templates(skip=0, limit=50):
     out = []
     async for doc in cursor:
         doc["id"] = str(doc["_id"])
+        # Ensure stored HTML has absolute image URLs when sent to clients
+        doc["html"] = to_absolute_urls(doc.get("html", ""))
         out.append(doc)
     return out
 
@@ -44,6 +47,7 @@ async def get_template(template_id: str):
     if not doc:
         return None
     doc["id"] = str(doc["_id"])
+    doc["html"] = to_absolute_urls(doc.get("html", ""))
     return doc
 
 
@@ -143,8 +147,11 @@ async def process_template_upload(file: UploadFile, segment: str, name: str, use
 
                 saved_image_names.append(new_name)
 
-                # Rewrite HTML references
+                # Rewrite HTML references (relative) first
                 html_content = html_content.replace(relative_path, f"/storage/files/{new_name}")
+
+    # Convert any remaining /storage/files paths to absolute using BACKEND_PUBLIC_URL
+    html_content = to_absolute_urls(html_content)
 
     # -----------------------------------
     # OPTIONAL — Cleanup extracted template folder
