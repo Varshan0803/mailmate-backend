@@ -16,6 +16,7 @@ router = APIRouter(prefix="/storage", tags=["storage"])
 
 from typing import List
 from app.storage.schemas import UploadResponse, BatchUploadResponse, BatchUploadResult
+from app.utils import supabase_storage
 
 @router.post("/upload-images/batch", response_model=BatchUploadResponse, status_code=HTTP_201_CREATED)
 async def upload_images_batch(files: List[UploadFile] = File(...), user = Depends(get_current_user)):
@@ -39,20 +40,24 @@ async def upload_images_batch(files: List[UploadFile] = File(...), user = Depend
                 ))
                  continue
 
-            unique = storage_utils.gen_unique_filename(file.filename)
-            save_path = os.path.join(UPLOAD_DIR, unique)
-            with open(save_path, "wb") as f:
-                f.write(contents)
+            unique_filename = storage_utils.gen_unique_filename(file.filename)
             
-            url = f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}/static/uploads/{unique}"
+            # --- SUPABASE UPLOAD ---
+            url = supabase_storage.upload_file_to_supabase(
+                file_bytes=contents,
+                filename=unique_filename,
+                content_type=file.content_type or "application/octet-stream"
+            )
+            
             results.append(BatchUploadResult(
                 success=True,
                 url=url,
-                filename=unique,
+                filename=unique_filename,
                 original_filename=file.filename,
                 size=len(contents)
             ))
         except Exception as e:
+             print(f"Upload failed for {file.filename}: {e}")
              results.append(BatchUploadResult(
                     success=False, 
                     original_filename=file.filename, 
@@ -63,22 +68,25 @@ async def upload_images_batch(files: List[UploadFile] = File(...), user = Depend
 @router.post("/upload-image", response_model=UploadResponse, status_code=HTTP_201_CREATED)
 async def upload_image(file: UploadFile = File(...), user = Depends(get_current_user)):
     if not storage_utils.is_allowed_extension(file.filename):
-        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="Invalid file type")
+        raise HTTPException(status_code=400, detail="Invalid file type")
+
     contents = await file.read()
     if len(contents) > storage_utils.MAX_SIZE_BYTES:
-        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="File too large")
-    # Basic content heuristic
-    head = contents[:512]
-    if b"<?php" in head or head.startswith(b"#!"):
-        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="Executable content not allowed")
-    unique = storage_utils.gen_unique_filename(file.filename)
-    save_path = os.path.join(UPLOAD_DIR, unique)
-    with open(save_path, "wb") as f:
-        f.write(contents)
-    # Return absolute URL path using BACKEND_PUBLIC_URL to match the /static mount
-    # url = f"/storage/files/{unique}" -> INCORRECT
-    url = f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}/static/uploads/{unique}"
-    return UploadResponse(filename=unique, url=url, size=len(contents))
+        raise HTTPException(status_code=413, detail="File too large")
+
+    unique_filename = storage_utils.gen_unique_filename(file.filename)
+    
+    try:
+        # --- SUPABASE UPLOAD ---
+        url = supabase_storage.upload_file_to_supabase(
+            file_bytes=contents,
+            filename=unique_filename,
+            content_type=file.content_type or "application/octet-stream"
+        )
+        return UploadResponse(filename=unique_filename, url=url, size=len(contents))
+    except Exception as e:
+        print(f"Supabase upload failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to upload image to storage")
 
 @router.get("/files/{filename}")
 async def get_file(filename: str):

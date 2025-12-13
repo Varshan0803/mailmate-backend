@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = os.getenv("REDIS_URL", "redis://localhost:6379/1")
     # -----------------------
 
+    # Supabase Settings
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", "https://fxaqxrqmizrfnkpxgdpp.supabase.co")
+    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4YXF4cnFtaXpyZm5rcHhnZHBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU2MDMwMzAsImV4cCI6MjA4MTE3OTAzMH0.uRQOFMRI0uJoIJTC7efBpkh3wODec15jweuSlfpbERAS")
+    SUPABASE_BUCKET: str = os.getenv("SUPABASE_BUCKET", "images")
+
     REGISTRATION_SECRET_KEY: str = "secret123"
 
     class Config:
