@@ -1,37 +1,52 @@
-# Walkthrough - Image Upload Verification
+# Walkthrough - Image Upload Refactor
 
-I have verified and improved the image upload functionality for both single images and template ZIPs.
+I have refactored the image upload feature to align with the provided reference report, preventing focus loss issues in the editor.
 
 ## Changes
 
-### [storage/router.py](file:///e:/MailMate/Backend_MailMate/final_task3/Helyxon-Task3-main/app/storage/router.py)
+### 1. Backend: Batch Upload
+Added a new endpoint to handle multiple image uploads in a single request.
 
-I ensured that the generated URL for uploaded images correctly handles the `BACKEND_PUBLIC_URL` by stripping any trailing slashes. This prevents potential double-slash issues in the resulting URL (e.g., `https://backend/static/...` instead of `https://backend//static/...`).
+-   **File**: `app/storage/router.py`
+-   **Endpoint**: `POST /storage/upload-images/batch`
+-   **Response**:
+    ```json
+    {
+        "results": [
+            {
+                "success": true,
+                "url": "https://backend/static/uploads/unique_name.png",
+                "filename": "...",
+                "original_filename": "..."
+            }
+        ]
+    }
+    ```
 
-```python
-# Before
-url = f"{settings.BACKEND_PUBLIC_URL}/static/uploads/{unique}"
+### 2. Frontend: ImageImporter Component
+Created a dedicated modal component for managing image uploads.
 
-# After
-url = f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}/static/uploads/{unique}"
-```
+-   **File**: `src/components/ImageImporter.tsx`
+-   **Features**:
+    -   Batch upload support.
+    -   Image preview.
+    -   Alt text editing.
+    -   "Insert Selected" action which uses a callback to place images.
+
+### 3. Frontend: Logic & Integration
+Updated `Campaign/App.tsx` to use the `ImageImporter` and improved the insertion logic.
+
+-   **Cursor Preservation**: The editor now remembers the cursor position (`lastSelectionRange`) even when focus is lost (e.g., clicking buttons or opening modals).
+-   **Explicit Placement**: Images are inserted programmatically at the saved cursor position using `handleImagesPlaced`.
 
 ## Verification Results
 
-I created and ran a verification script `manual_test_uploads.py` that simulated:
-1.  **Single Image Upload**: Verified that the returned URL starts with the correct `BACKEND_PUBLIC_URL`.
-2.  **Template ZIP Upload**: Verified that the HTML content is parsed and image references are rewritten to absolute URLs pointing to the backend.
+### Batch Upload Verification
+I ran a verification script `manual_test_batch.py` that successfully uploaded test images to the new batch endpoint and asserted correct URL generation.
 
-### Test Output Summary
 ```
---- Testing Single Image Upload ---
-Response: {'filename': '...', 'url': 'https://web-production-dab80.up.railway.app/static/uploads/...', ...}
-SUCCESS: URL starts with https://web-production-dab80.up.railway.app
-
---- Testing Template ZIP Upload ---
-Response HTML snippet: <html><body><h1>Hello</h1><img src="https://web-production-dab80.up.railway.app/storage/files/..." /></body></html>...
-SUCCESS: HTML contains absolute URL base https://web-production-dab80.up.railway.app
-SUCCESS: Images list is populated: ['...']
+--- Testing Batch Image Upload ---
+SUCCESS: Received 2 results
+SUCCESS: File test1.png uploaded correctly to http://localhost:8000/static/uploads/...
+SUCCESS: File test2.png uploaded correctly to http://localhost:8000/static/uploads/...
 ```
-
-The system is now correctly handling image uploads and URL generation.

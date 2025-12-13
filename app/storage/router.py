@@ -14,6 +14,52 @@ storage_utils.ensure_upload_dir(UPLOAD_DIR)
 
 router = APIRouter(prefix="/storage", tags=["storage"])
 
+from typing import List
+from app.storage.schemas import UploadResponse, BatchUploadResponse, BatchUploadResult
+
+@router.post("/upload-images/batch", response_model=BatchUploadResponse, status_code=HTTP_201_CREATED)
+async def upload_images_batch(files: List[UploadFile] = File(...), user = Depends(get_current_user)):
+    results = []
+    for file in files:
+        try:
+            if not storage_utils.is_allowed_extension(file.filename):
+                results.append(BatchUploadResult(
+                    success=False, 
+                    original_filename=file.filename, 
+                    error="Invalid file type"
+                ))
+                continue
+            
+            contents = await file.read()
+            if len(contents) > storage_utils.MAX_SIZE_BYTES:
+                 results.append(BatchUploadResult(
+                    success=False, 
+                    original_filename=file.filename, 
+                    error="File too large"
+                ))
+                 continue
+
+            unique = storage_utils.gen_unique_filename(file.filename)
+            save_path = os.path.join(UPLOAD_DIR, unique)
+            with open(save_path, "wb") as f:
+                f.write(contents)
+            
+            url = f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}/static/uploads/{unique}"
+            results.append(BatchUploadResult(
+                success=True,
+                url=url,
+                filename=unique,
+                original_filename=file.filename,
+                size=len(contents)
+            ))
+        except Exception as e:
+             results.append(BatchUploadResult(
+                    success=False, 
+                    original_filename=file.filename, 
+                    error=str(e)
+                ))
+    return BatchUploadResponse(results=results)
+
 @router.post("/upload-image", response_model=UploadResponse, status_code=HTTP_201_CREATED)
 async def upload_image(file: UploadFile = File(...), user = Depends(get_current_user)):
     if not storage_utils.is_allowed_extension(file.filename):
